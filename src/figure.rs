@@ -1,6 +1,7 @@
 use std::fmt;
 
 const SIZE: usize = 3;
+const AREA: usize = SIZE * SIZE;
 // XXX: these directions could be an enum, but I think that'd just complicate things
 // (not like all the other decisions i've made here 😐)
 const UP: usize = 0_usize.wrapping_sub(SIZE);
@@ -60,11 +61,25 @@ impl InbentoParsable for usize {
 
 #[derive(PartialEq, Eq, std::hash::Hash)]
 pub struct Figure<T: InbentoParsable> {
-    layout: [Option<T>; SIZE * SIZE],
+    layout: [Option<T>; AREA],
     rotatable: bool,
+    bounding_width: usize,
+    bounding_height: usize,
 }
 
 impl<T: InbentoParsable> Figure<T> {
+    pub fn new(layout: [Option<T>; AREA], rotatable: bool) -> Self {
+        let bounding_width = layout.iter().enumerate()
+            .flat_map(|(idx, elem)| elem.is_some().then(|| idx % 3 + 1))
+            .max()
+            .unwrap_or(0);
+        let bounding_height = layout.iter().enumerate()
+            .flat_map(|(idx, elem)| elem.is_some().then(|| idx / 3 + 1))
+            .max()
+            .unwrap_or(0);
+        Figure { layout, rotatable, bounding_width, bounding_height }
+    }
+
     pub fn from_str(string: &str) -> Result<Self, ParserError> {
         let string: String = string.split_whitespace().collect();
 
@@ -85,7 +100,7 @@ impl<T: InbentoParsable> Figure<T> {
         let homogeneity_error = Err("figure must be wrapped entirely in `[ ]` or `( )`");
 
         struct LayoutWriter<T> {
-            layout: [Option<T>; SIZE * SIZE],
+            layout: [Option<T>; AREA],
             idx: usize,
             line_end: usize,
             expected_end: usize,
@@ -123,13 +138,13 @@ impl<T: InbentoParsable> Figure<T> {
         for chr in string.chars() {
             match chr {
                 '[' => {
-                    if writer.idx >= SIZE * SIZE { return Err("too many rows") } // TODO: String
+                    if writer.idx >= AREA { return Err("too many rows") } // TODO: String
                     if rotatable { return homogeneity_error }
                     if is_open { return Err("unexpected start of row") }
                     is_open = true;
                 }
                 '(' => {
-                    if writer.idx >= SIZE * SIZE { return Err("too many rows") } // TODO: String
+                    if writer.idx >= AREA { return Err("too many rows") } // TODO: String
                     if !rotatable { return homogeneity_error }
                     if is_open { return Err("unexpected start of row") }
                     is_open = true;
@@ -158,7 +173,7 @@ impl<T: InbentoParsable> Figure<T> {
         }
         if is_open { return Err("unterminated row") }
         let LayoutWriter { layout, .. } = writer;
-        Ok(Figure { layout, rotatable })
+        Ok(Figure::new(layout, rotatable))
     }
     // fn configurations(&self) -> Vec<Self> {
     //     // TODO: Push rotates different
@@ -168,19 +183,29 @@ impl<T: InbentoParsable> Figure<T> {
 
 impl<T: InbentoParsable> fmt::Debug for Figure<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\n")?;
-        for y in 0..SIZE {
+        let write_row = |f: &mut fmt::Formatter, y: usize| {
             write!(f, "{}", if self.rotatable { '(' } else { '[' })?;
-            for x in 0..SIZE {
+            for x in 0..self.bounding_width {
                 let idx = y * SIZE + x;
                 write!(f, "{}", match &self.layout[idx] {
                     None => '.',
                     Some(c) => InbentoParsable::to_char(c),
                 })?;
             }
-            write!(f, "{}\n", if self.rotatable { ')' } else { ']' })?;
+            write!(f, "{}", if self.rotatable { ')' } else { ']' })
+        };
+
+        write!(f, "\"")?;
+        if self.bounding_height == 1 {
+            write_row(f, 0)?;
+        } else {
+            write!(f, "\n")?;
+            for y in 0..self.bounding_height {
+                write_row(f, y)?;
+                write!(f, "\n")?;
+            }
         }
-        Ok(())
+        write!(f, "\"")
     }
 }
 
