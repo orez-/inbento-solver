@@ -147,7 +147,7 @@ impl<T: InbentoParsable> Figure<T> {
     // }
 }
 
-impl<T: fmt::Debug + InbentoParsable> fmt::Debug for Figure<T> {
+impl<T: InbentoParsable> fmt::Debug for Figure<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         for y in 0..SIZE {
             write!(f, "{}", if self.rotatable { '(' } else { '[' })?;
