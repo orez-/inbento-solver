@@ -26,7 +26,7 @@ pub trait InbentoCell: Clone {
 impl InbentoCell for () {
     fn to_char(&self) -> char { '#' }
     fn parse(_: char) -> Result<Self, ()> { Ok(()) }
-    fn rotate(&self) -> Self { () }
+    fn rotate(&self) -> Self {}
 }
 
 impl InbentoCell for u8 {
@@ -85,11 +85,11 @@ pub struct Figure<T: InbentoCell> {
 impl<T: InbentoCell> Figure<T> {
     pub fn new(layout: [Option<T>; AREA], rotatable: bool) -> Self {
         let bounding_width = layout.iter().enumerate()
-            .flat_map(|(idx, elem)| elem.is_some().then(|| idx % 3 + 1))
+            .flat_map(|(idx, elem)| elem.is_some().then_some(idx % 3 + 1))
             .max()
             .unwrap_or(0);
         let bounding_height = layout.iter().enumerate()
-            .flat_map(|(idx, elem)| elem.is_some().then(|| idx / 3 + 1))
+            .flat_map(|(idx, elem)| elem.is_some().then_some(idx / 3 + 1))
             .max()
             .unwrap_or(0);
         Figure { layout, rotatable, bounding_width, bounding_height }
@@ -243,10 +243,10 @@ impl<T: InbentoCell> fmt::Debug for Figure<T> {
         if self.bounding_height == 1 {
             write_row(f, 0)?;
         } else {
-            write!(f, "\n")?;
+            writeln!(f)?;
             for y in 0..self.bounding_height {
                 write_row(f, y)?;
-                write!(f, "\n")?;
+                writeln!(f)?;
             }
         }
         write!(f, "\"")
