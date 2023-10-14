@@ -16,17 +16,17 @@ pub type Board = Figure<u8>; // ehh
 pub type Shape = Figure<()>;
 pub type Push = Figure<usize>;
 
-pub trait InbentoParsable {
+pub trait InbentoCell: Clone {
     fn to_char(&self) -> char;
     fn parse(c: char) -> Result<Self, ()> where Self: Sized;
 }
 
-impl InbentoParsable for () {
+impl InbentoCell for () {
     fn to_char(&self) -> char { '#' }
     fn parse(_: char) -> Result<Self, ()> { Ok(()) }
 }
 
-impl InbentoParsable for u8 {
+impl InbentoCell for u8 {
     fn to_char(&self) -> char {
         if *self >= 10 { panic!() }
         (self + b'0') as char
@@ -37,7 +37,7 @@ impl InbentoParsable for u8 {
     }
 }
 
-impl InbentoParsable for usize {
+impl InbentoCell for usize {
     fn to_char(&self) -> char {
         match *self {
             UP => '^',
@@ -59,15 +59,15 @@ impl InbentoParsable for usize {
     }
 }
 
-#[derive(PartialEq, Eq, std::hash::Hash)]
-pub struct Figure<T: InbentoParsable> {
+#[derive(PartialEq, Eq, std::hash::Hash, Clone)]
+pub struct Figure<T: InbentoCell> {
     layout: [Option<T>; AREA],
     rotatable: bool,
     bounding_width: usize,
     bounding_height: usize,
 }
 
-impl<T: InbentoParsable> Figure<T> {
+impl<T: InbentoCell> Figure<T> {
     pub fn new(layout: [Option<T>; AREA], rotatable: bool) -> Self {
         let bounding_width = layout.iter().enumerate()
             .flat_map(|(idx, elem)| elem.is_some().then(|| idx % 3 + 1))
@@ -165,7 +165,7 @@ impl<T: InbentoParsable> Figure<T> {
                 chr => {
                     if !is_open { return Err("unexpected character outside of row") }
                     writer.write(Some(
-                        InbentoParsable::parse(chr)
+                        InbentoCell::parse(chr)
                             .map_err(|_| "could not parse character")? // TODO: String
                     ))?;
                 }
@@ -175,13 +175,42 @@ impl<T: InbentoParsable> Figure<T> {
         let LayoutWriter { layout, .. } = writer;
         Ok(Figure::new(layout, rotatable))
     }
-    // fn configurations(&self) -> Vec<Self> {
-    //     // TODO: Push rotates different
 
-    // }
+    fn configurations(&self) -> Vec<Self> {
+        // TODO: Push rotates different
+        let rotations: Vec<Self> = if self.rotatable {
+            let turn90 = self.rotate();
+            let turn180 = turn90.rotate();
+            let turn270 = turn180.rotate();
+            // TODO: dedupe
+            vec![self.clone(), turn90, turn180, turn270]
+        } else { vec![self.clone()] };
+
+        vec![]
+        // for offset in
+    }
+
+    fn rotate(&self) -> Self {
+        let mut out = Self {
+            layout: Default::default(),
+            rotatable: self.rotatable,
+            bounding_width: self.bounding_height, // nb: swapped
+            bounding_height: self.bounding_width, // nb: swapped
+        };
+        for sy in 0..self.bounding_height {
+            for sx in 0..self.bounding_width {
+                let dx = self.bounding_height - sy - 1;
+                let dy = sx;
+                let sidx = sy * SIZE + sx;
+                let didx = dy * SIZE + dx;
+                out.layout[didx] = self.layout[sidx].clone();
+            }
+        }
+        out
+    }
 }
 
-impl<T: InbentoParsable> fmt::Debug for Figure<T> {
+impl<T: InbentoCell> fmt::Debug for Figure<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let write_row = |f: &mut fmt::Formatter, y: usize| {
             write!(f, "{}", if self.rotatable { '(' } else { '[' })?;
@@ -189,7 +218,7 @@ impl<T: InbentoParsable> fmt::Debug for Figure<T> {
                 let idx = y * SIZE + x;
                 write!(f, "{}", match &self.layout[idx] {
                     None => '.',
-                    Some(c) => InbentoParsable::to_char(c),
+                    Some(c) => InbentoCell::to_char(c),
                 })?;
             }
             write!(f, "{}", if self.rotatable { ')' } else { ']' })
@@ -236,5 +265,11 @@ mod tests {
     fn test_multirow() {
         let shape = Shape::from_str("(#)(.)(#)");
         assert!(shape.is_ok(), "{shape:?}");
+    }
+
+    #[test]
+    fn test_rotate() {
+        let shape = Piece::from_str("(12)(34)(56)").unwrap();
+        assert_eq!(shape.rotate(), Piece::from_str("(531)(642)").unwrap());
     }
 }
