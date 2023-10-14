@@ -4,26 +4,29 @@ const SIZE: usize = 3;
 const AREA: usize = SIZE * SIZE;
 // XXX: these directions could be an enum, but I think that'd just complicate things
 // (not like all the other decisions i've made here 😐)
-const UP: usize = 0_usize.wrapping_sub(SIZE);
-const RIGHT: usize = 1;
-const DOWN: usize = SIZE;
-const LEFT: usize = usize::MAX;
+type Direction = usize;
+const UP: Direction = 0_usize.wrapping_sub(SIZE);
+const RIGHT: Direction = 1;
+const DOWN: Direction = SIZE;
+const LEFT: Direction = usize::MAX;
 
 type ParserError = &'static str;
 
 pub type Piece = Figure<u8>;
 pub type Board = Figure<u8>; // ehh
 pub type Shape = Figure<()>;
-pub type Push = Figure<usize>;
+pub type Push = Figure<Direction>;
 
 pub trait InbentoCell: Clone {
     fn to_char(&self) -> char;
     fn parse(c: char) -> Result<Self, ()> where Self: Sized;
+    fn rotate(&self) -> Self;
 }
 
 impl InbentoCell for () {
     fn to_char(&self) -> char { '#' }
     fn parse(_: char) -> Result<Self, ()> { Ok(()) }
+    fn rotate(&self) -> Self { () }
 }
 
 impl InbentoCell for u8 {
@@ -35,9 +38,11 @@ impl InbentoCell for u8 {
     fn parse(c: char) -> Result<Self, ()> {
         c.to_digit(10).ok_or(()).map(|d| d as u8)
     }
+
+    fn rotate(&self) -> Self { *self }
 }
 
-impl InbentoCell for usize {
+impl InbentoCell for Direction {
     fn to_char(&self) -> char {
         match *self {
             UP => '^',
@@ -56,6 +61,16 @@ impl InbentoCell for usize {
             '<' => LEFT,
             _ => return Err(()),
         })
+    }
+
+    fn rotate(&self) -> Self {
+        match *self {
+            UP => RIGHT,
+            RIGHT => DOWN,
+            DOWN => LEFT,
+            LEFT => UP,
+            _ => panic!(),
+        }
     }
 }
 
@@ -177,7 +192,6 @@ impl<T: InbentoCell> Figure<T> {
     }
 
     fn configurations(&self) -> Vec<Self> {
-        // TODO: Push rotates different
         let rotations: Vec<Self> = if self.rotatable {
             let turn90 = self.rotate();
             let turn180 = turn90.rotate();
@@ -203,7 +217,8 @@ impl<T: InbentoCell> Figure<T> {
                 let dy = sx;
                 let sidx = sy * SIZE + sx;
                 let didx = dy * SIZE + dx;
-                out.layout[didx] = self.layout[sidx].clone();
+                // rotate the individual cell as well, if it needs it.
+                out.layout[didx] = self.layout[sidx].as_ref().map(|ic| ic.rotate());
             }
         }
         out
@@ -271,5 +286,11 @@ mod tests {
     fn test_rotate() {
         let shape = Piece::from_str("(12)(34)(56)").unwrap();
         assert_eq!(shape.rotate(), Piece::from_str("(531)(642)").unwrap());
+    }
+
+    #[test]
+    fn test_rotate_directions() {
+        let shape = Push::from_str("(^>)").unwrap();
+        assert_eq!(shape.rotate(), Push::from_str("(>)(v)").unwrap());
     }
 }
