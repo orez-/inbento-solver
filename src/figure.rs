@@ -105,13 +105,14 @@ impl<T: InbentoParsable> Figure<T> {
                 if self.idx < self.expected_end {
                     return Err("not enough elements in row"); // TODO: String
                 }
-                self.idx = self.expected_end;
+                self.idx = self.line_end;
                 self.expected_end += SIZE;
                 self.line_end += SIZE;
                 Ok(())
             }
         }
 
+        let mut is_open = false;
         let mut writer = LayoutWriter {
             layout: Default::default(),
             idx: 0,
@@ -121,23 +122,41 @@ impl<T: InbentoParsable> Figure<T> {
 
         for chr in string.chars() {
             match chr {
-                '[' => if rotatable { return homogeneity_error }
-                '(' => if !rotatable { return homogeneity_error }
+                '[' => {
+                    if writer.idx >= SIZE * SIZE { return Err("too many rows") } // TODO: String
+                    if rotatable { return homogeneity_error }
+                    if is_open { return Err("unexpected start of row") }
+                    is_open = true;
+                }
+                '(' => {
+                    if writer.idx >= SIZE * SIZE { return Err("too many rows") } // TODO: String
+                    if !rotatable { return homogeneity_error }
+                    if is_open { return Err("unexpected start of row") }
+                    is_open = true;
+                }
                 '.' => writer.write(None)?,
                 ']' => {
                     if rotatable { return homogeneity_error }
+                    if !is_open { return Err("unexpected end of row") }
                     writer.new_line()?;
+                    is_open = false;
                 }
                 ')' => {
                     if !rotatable { return homogeneity_error }
+                    if !is_open { return Err("unexpected end of row") }
                     writer.new_line()?;
+                    is_open = false;
                 }
-                chr => writer.write(Some(
-                    InbentoParsable::parse(chr)
-                        .map_err(|_| "could not parse character")? // TODO: String
-                ))?,
+                chr => {
+                    if !is_open { return Err("unexpected character outside of row") }
+                    writer.write(Some(
+                        InbentoParsable::parse(chr)
+                            .map_err(|_| "could not parse character")? // TODO: String
+                    ))?;
+                }
             }
         }
+        if is_open { return Err("unterminated row") }
         let LayoutWriter { layout, .. } = writer;
         Ok(Figure { layout, rotatable })
     }
@@ -149,6 +168,7 @@ impl<T: InbentoParsable> Figure<T> {
 
 impl<T: InbentoParsable> fmt::Debug for Figure<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n")?;
         for y in 0..SIZE {
             write!(f, "{}", if self.rotatable { '(' } else { '[' })?;
             for x in 0..SIZE {
@@ -161,5 +181,35 @@ impl<T: InbentoParsable> fmt::Debug for Figure<T> {
             write!(f, "{}\n", if self.rotatable { ')' } else { ']' })?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_unterminated_row() {
+        let err = Shape::from_str("(#.#)(.#");
+        assert!(err.is_err(), "{err:?}");
+    }
+
+    #[test]
+    fn test_extra_opener() {
+        let err = Shape::from_str("(#.#)(.#(.)");
+        assert!(err.is_err(), "{err:?}");
+    }
+
+    #[test]
+    fn test_too_tall() {
+        assert_eq!(SIZE, 3); // test only works if we know what too-tall is
+        let err = Shape::from_str("(#)(.)(#)(#)");
+        assert!(err.is_err(), "{err:?}");
+    }
+
+    #[test]
+    fn test_multirow() {
+        let shape = Shape::from_str("(#)(.)(#)");
+        assert!(shape.is_ok(), "{shape:?}");
     }
 }
