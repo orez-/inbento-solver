@@ -114,7 +114,7 @@ fn max_y<T>(layout: &[Option<T>; AREA]) -> usize {
         .unwrap_or(0)
 }
 
-#[derive(PartialEq, Eq, std::hash::Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Figure<T: InbentoCell> {
     layout: [Option<T>; AREA],
     rotatable: bool,
@@ -369,10 +369,19 @@ impl<T: InbentoCell> Figure<T> {
 #[allow(dead_code)]
 impl Board {
     pub fn apply_push(&self, push: &Push) -> Self {
+        // to ensure we're moving all the cells simultaneously, we lift
+        // each cell with a valid destination from `out` and place it at
+        // its destination in `lifted`, then apply `lifted` to `out`.
         let mut out = self.clone();
+        let mut lifted = Piece {
+            layout: Default::default(),
+            rotatable: false,
+            bounding_width: SIZE,
+            bounding_height: SIZE,
+        };
         for src in 0..AREA {
             let Some(dir) = push.layout[src] else { continue };
-            let Some(cell) = self.layout[src] else { continue };
+            if out.layout[src].is_none() { continue };
             let dest = src.wrapping_add(dir);
             // XXX: this boundscheck sucks.
             // rethink how we're representing Direction.
@@ -381,8 +390,9 @@ impl Board {
             let dx = dest % SIZE;
             let dy = dest / SIZE;
             if (sx != dx && sy != dy) || dest >= AREA { continue }
-            out.layout[dest] = Some(cell);
+            lifted.layout[dest] = out.layout[src].take();
         }
+        out.apply_piece_mut(&lifted);
         out
     }
 
@@ -408,12 +418,16 @@ impl Board {
 
     pub fn apply_piece(&self, piece: &Piece) -> Self {
         let mut out = self.clone();
-        for (src, dest) in zip(piece.layout, &mut out.layout) {
+        out.apply_piece_mut(piece);
+        out
+    }
+
+    fn apply_piece_mut(&mut self, piece: &Piece) {
+        for (src, dest) in zip(piece.layout, &mut self.layout) {
             if src.is_some() {
                 *dest = src;
             }
         }
-        out
     }
 
     pub fn apply_copy(&self, copy: &Piece) -> Self {
@@ -563,5 +577,14 @@ mod tests {
             Shape::from_str("(.#.)(...)(.#.)").unwrap(),
             Shape::from_str("(..#)(...)(..#)").unwrap(),
         ]);
+    }
+
+    #[test]
+    fn test_push() {
+        let board = Board::from_str("[123][456][789]").unwrap();
+        let push = Push::from_str("(...)(..v)(..>)").unwrap();
+        let expected = Board::from_str("[123][45.][786]").unwrap();
+        let actual = board.apply_push(&push);
+        assert_eq!(actual, expected);
     }
 }
