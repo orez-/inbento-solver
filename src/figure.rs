@@ -222,6 +222,44 @@ impl<T: InbentoCell> Figure<T> {
         Ok(Figure { layout, rotatable, bounding_width, bounding_height })
     }
 
+    /// Return a clone of this Figure rotated 90˚ clockwise. The Figure's
+    /// bounding width and height will be rotated as well. If the Figure's
+    /// elements have directionality, they will also be rotated appropriately.
+    ///
+    /// eg:
+    ///  (123)    (41)
+    ///  (4..) => (.2)
+    ///           (.3)
+    fn rotate(&self) -> Self {
+        let mut out = Self {
+            layout: Default::default(),
+            rotatable: self.rotatable,
+            bounding_width: self.bounding_height, // nb: swapped
+            bounding_height: self.bounding_width, // nb: swapped
+        };
+        for sy in 0..self.bounding_height {
+            for sx in 0..self.bounding_width {
+                let dx = self.bounding_height - sy - 1;
+                let dy = sx;
+                let sidx = sy * SIZE + sx;
+                let didx = dy * SIZE + dx;
+                // rotate the individual cell as well, if it needs it.
+                out.layout[didx] = self.layout[sidx].as_ref().map(|ic| ic.rotate());
+            }
+        }
+        out
+    }
+
+    /// Return a clone of this Figure translated by some Δx and Δy.
+    /// Expands the bounding width and height to the full 3×3 area,
+    /// representing the Figure's absolute position within the space.
+    ///
+    /// Any cells which are translated past the 3×3 area are discarded.
+    ///
+    /// eg, shifting the following figure by 1, 2:
+    ///   (56)    (...)
+    ///        => (...)
+    ///           (.56)
     #[allow(non_snake_case)]
     fn shift(&self, Δx: isize, Δy: isize) -> Self {
         // assert!(self.bounding_width + Δx < SIZE);
@@ -246,6 +284,21 @@ impl<T: InbentoCell> Figure<T> {
         out
     }
 
+    /// Returns an iterator of the different translations of this Figure
+    /// inscribed within the 3×3 area. Expands the bounding width and height
+    /// to the full area, representing the Figure's absolute position within
+    /// the space.
+    ///
+    /// eg, for the Piece:
+    ///   (12)
+    ///   (34)
+    ///
+    /// its translations are:
+    ///   (12.)  (.12)  (...)  (...)
+    ///   (34.)  (.34)  (12.)  (.12)
+    ///   (...)  (...)  (34.)  (.34)
+    ///
+    /// Note that the exact order of the translations should not be relied on.
     fn all_translations(&self) -> impl Iterator<Item=Self> + '_ {
         iproduct!(
             (0..=SIZE - self.bounding_width),
@@ -253,7 +306,23 @@ impl<T: InbentoCell> Figure<T> {
         ).map(|(x, y)| self.shift(x as isize, y as isize))
     }
 
-    // ignores `rotatable`
+    /// Returns a Vec of the *unique* rotations of this Figure. The Figure's
+    /// bounding width and height will be rotated as well. If the Figure's
+    /// elements have directionality, they will also be rotated appropriately.
+    ///
+    /// eg, for the Push:
+    ///   (>v)
+    ///   (<.)
+    ///   (>.)
+    ///
+    /// its rotations are:
+    ///   (>v)  (v^v)  (.<)  (>..)
+    ///   (<.)  (..<)  (.>)  (^v^)
+    ///   (>.)         (^<)
+    ///
+    /// Note that the exact order of the rotations should not be relied on.
+    /// Note also that this function will provide rotations regardless of
+    /// the `rotatable` flag.
     fn all_rotations(&self) -> Vec<Self> {
         let turn90 = self.rotate();
         let turn180 = turn90.rotate();
@@ -269,32 +338,28 @@ impl<T: InbentoCell> Figure<T> {
         rotations
     }
 
+    /// Returns a Vec of the *unique* transformations that may be applied
+    /// to this Figure. That is, all the translations of all the unique
+    /// rotations of the Figure.
+    ///
+    /// If the Figure is not `rotatable`, returns only the translations.
+    ///
+    /// eg, for the Piece:
+    ///   (123)
+    ///   (4.6)
+    ///
+    /// its transformations are:
+    ///   (123)  (...)  (41.)  (.41)  (6.4)  (...)  (36.)  (.36)
+    ///   (4.6)  (123)  (.2.)  (..2)  (321)  (6.4)  (2..)  (.2.)
+    ///   (...)  (4.6)  (63.)  (.63)  (...)  (321)  (14.)  (.14)
+    ///
+    /// Note that the exact order of the transformations should not be relied on.
     pub fn all_transformations(&self) -> Vec<Self> {
         if !self.rotatable {
             return self.all_translations().collect();
         }
         let rotations = self.all_rotations();
         rotations.iter().flat_map(|aligned| aligned.all_translations()).collect()
-    }
-
-    fn rotate(&self) -> Self {
-        let mut out = Self {
-            layout: Default::default(),
-            rotatable: self.rotatable,
-            bounding_width: self.bounding_height, // nb: swapped
-            bounding_height: self.bounding_width, // nb: swapped
-        };
-        for sy in 0..self.bounding_height {
-            for sx in 0..self.bounding_width {
-                let dx = self.bounding_height - sy - 1;
-                let dy = sx;
-                let sidx = sy * SIZE + sx;
-                let didx = dy * SIZE + dx;
-                // rotate the individual cell as well, if it needs it.
-                out.layout[didx] = self.layout[sidx].as_ref().map(|ic| ic.rotate());
-            }
-        }
-        out
     }
 }
 
