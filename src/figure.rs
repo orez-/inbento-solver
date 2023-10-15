@@ -307,7 +307,7 @@ impl Board {
         let mut out = self.clone();
         for src in 0..AREA {
             let Some(dir) = push.layout[src] else { continue };
-            let Some(cell) = self.layout[src].clone() else { continue };
+            let Some(cell) = self.layout[src] else { continue };
             let dest = src.wrapping_add(dir);
             // XXX: this boundscheck sucks.
             // rethink how we're representing Direction.
@@ -345,7 +345,7 @@ impl Board {
         let mut out = self.clone();
         for (src, dest) in zip(piece.layout, &mut out.layout) {
             if src.is_some() {
-                *dest = src.clone();
+                *dest = src;
             }
         }
         out

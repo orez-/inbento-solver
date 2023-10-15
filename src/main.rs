@@ -70,11 +70,11 @@ enum Tool {
 impl Tool {
     fn all_transformations(&self) -> Vec<Tool> {
         match self {
-            Tool::Push(fig) => fig.all_transformations().into_iter().map(|f| Tool::Push(f)).collect(),
-            Tool::Lift(fig) => fig.all_transformations().into_iter().map(|f| Tool::Lift(f)).collect(),
-            Tool::Piece(fig) => fig.all_transformations().into_iter().map(|f| Tool::Piece(f)).collect(),
-            Tool::Copy(fig) => fig.all_transformations().into_iter().map(|f| Tool::Copy(f)).collect(),
-            Tool::Swap(fig) => fig.all_transformations().into_iter().map(|f| Tool::Swap(f)).collect(),
+            Tool::Push(fig) => fig.all_transformations().into_iter().map(Tool::Push).collect(),
+            Tool::Lift(fig) => fig.all_transformations().into_iter().map(Tool::Lift).collect(),
+            Tool::Piece(fig) => fig.all_transformations().into_iter().map(Tool::Piece).collect(),
+            Tool::Copy(fig) => fig.all_transformations().into_iter().map(Tool::Copy).collect(),
+            Tool::Swap(fig) => fig.all_transformations().into_iter().map(Tool::Swap).collect(),
         }
     }
 }
