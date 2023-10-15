@@ -123,12 +123,6 @@ pub struct Figure<T: InbentoCell> {
 }
 
 impl<T: InbentoCell> Figure<T> {
-    pub fn new(layout: [Option<T>; AREA], rotatable: bool) -> Self {
-        let bounding_width = max_x(&layout);
-        let bounding_height = max_y(&layout);
-        Figure { layout, rotatable, bounding_width, bounding_height }
-    }
-
     pub fn from_str(string: &str) -> Result<Self, ParserError> {
         let string: String = string.split_whitespace().collect();
 
@@ -139,9 +133,9 @@ impl<T: InbentoCell> Figure<T> {
             '(' => true,
             _ => return Err("figure must be wrapped in `[` or `(`")
         };
-        let width = metadata_it.position(|c| matches!(c, ']' | ')'))
+        let bounding_width = metadata_it.position(|c| matches!(c, ']' | ')'))
             .ok_or("figure must have matching closing delimiter (`[ ]`, `( )`)")?;
-        if width > SIZE {
+        if bounding_width > SIZE {
             return Err("figure is too wide"); // TODO: String (or const interpolation would be nice)
         }
 
@@ -176,11 +170,12 @@ impl<T: InbentoCell> Figure<T> {
             }
         }
 
+        let mut bounding_height = 0;
         let mut is_open = false;
         let mut writer = LayoutWriter {
             layout: Default::default(),
             idx: 0,
-            expected_end: width,
+            expected_end: bounding_width,
             line_end: SIZE,
         };
 
@@ -190,12 +185,14 @@ impl<T: InbentoCell> Figure<T> {
                     if writer.idx >= AREA { return Err("too many rows") } // TODO: String
                     if rotatable { return homogeneity_error }
                     if is_open { return Err("unexpected start of row") }
+                    bounding_height += 1;
                     is_open = true;
                 }
                 '(' => {
                     if writer.idx >= AREA { return Err("too many rows") } // TODO: String
                     if !rotatable { return homogeneity_error }
                     if is_open { return Err("unexpected start of row") }
+                    bounding_height += 1;
                     is_open = true;
                 }
                 '.' => writer.write(None)?,
@@ -222,9 +219,10 @@ impl<T: InbentoCell> Figure<T> {
         }
         if is_open { return Err("unterminated row") }
         let LayoutWriter { layout, .. } = writer;
-        Ok(Figure::new(layout, rotatable))
+        Ok(Figure { layout, rotatable, bounding_width, bounding_height })
     }
 
+    #[allow(non_snake_case)]
     fn shift(&self, Δx: isize, Δy: isize) -> Self {
         // assert!(self.bounding_width + Δx < SIZE);
         // assert!(self.bounding_height + Δy < SIZE);
@@ -250,8 +248,8 @@ impl<T: InbentoCell> Figure<T> {
 
     fn all_translations(&self) -> impl Iterator<Item=Self> + '_ {
         iproduct!(
-            (0..=SIZE - self.bounding_height),
-            (0..=SIZE - self.bounding_width)
+            (0..=SIZE - self.bounding_width),
+            (0..=SIZE - self.bounding_height)
         ).map(|(x, y)| self.shift(x as isize, y as isize))
     }
 
@@ -416,6 +414,14 @@ impl<T: InbentoCell> fmt::Debug for Figure<T> {
 mod tests {
     use super::*;
 
+    // TODO: currently uhhh not orderless.
+    // until we implement this, this is more a way to document
+    // which eqs should be orderless.
+    macro_rules! assert_eq_orderless {
+        ($left:expr, $right:expr $(,)?) => { assert_eq!($left, $right) };
+        ($left:expr, $right:expr, $($arg:tt)+) => { assert_eq!($left, $right, $($arg)+) };
+    }
+
     #[test]
     fn test_unterminated_row() {
         let err = Shape::from_str("(#.#)(.#");
@@ -456,8 +462,7 @@ mod tests {
     #[test]
     fn test_rotations() {
         let shape = Push::from_str("(^>)").unwrap();
-        // TODO: ideally this assertion would be orderless
-        assert_eq!(shape.all_rotations(), vec![
+        assert_eq_orderless!(shape.all_rotations(), vec![
             Push::from_str("(^>)").unwrap(),
             Push::from_str("(<v)").unwrap(),
             Push::from_str("(>)(v)").unwrap(),
@@ -468,8 +473,7 @@ mod tests {
     #[test]
     fn test_180_sym_rotations() {
         let shape = Shape::from_str("(##)").unwrap();
-        // TODO: ideally this assertion would be orderless
-        assert_eq!(shape.all_rotations(), vec![
+        assert_eq_orderless!(shape.all_rotations(), vec![
             Shape::from_str("(##)").unwrap(),
             Shape::from_str("(#)(#)").unwrap(),
         ]);
@@ -478,8 +482,21 @@ mod tests {
     #[test]
     fn test_90_sym_rotations() {
         let shape = Shape::from_str("(##)(##)").unwrap();
-        assert_eq!(shape.all_rotations(), vec![
+        assert_eq_orderless!(shape.all_rotations(), vec![
             Shape::from_str("(##)(##)").unwrap(),
+        ]);
+    }
+
+    #[test]
+    fn test_transformations() {
+        let shape = Shape::from_str("(#.#)").unwrap();
+        assert_eq_orderless!(shape.all_transformations(), vec![
+            Shape::from_str("(#.#)(...)(...)").unwrap(),
+            Shape::from_str("(...)(#.#)(...)").unwrap(),
+            Shape::from_str("(...)(...)(#.#)").unwrap(),
+            Shape::from_str("(#..)(...)(#..)").unwrap(),
+            Shape::from_str("(.#.)(...)(.#.)").unwrap(),
+            Shape::from_str("(..#)(...)(..#)").unwrap(),
         ]);
     }
 }
