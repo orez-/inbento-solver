@@ -220,10 +220,8 @@ impl<T: InbentoCell> Figure<T> {
         ).map(|(x, y)| self.shift(x, y))
     }
 
-    fn transformations(&self) -> Vec<Self> {
-        if !self.rotatable {
-            return self.all_translations().collect();
-        }
+    // ignores `rotatable`
+    fn all_rotations(&self) -> Vec<Self> {
         let turn90 = self.rotate();
         let turn180 = turn90.rotate();
         let turn270 = turn180.rotate();
@@ -235,6 +233,14 @@ impl<T: InbentoCell> Figure<T> {
         // I hope so, because otherwise we could have duplicate rotations here.
         let mut rotations = vec![self.clone(), turn180, turn90, turn270];
         rotations.dedup();
+        rotations
+    }
+
+    fn all_transformations(&self) -> Vec<Self> {
+        if !self.rotatable {
+            return self.all_translations().collect();
+        }
+        let rotations = self.all_rotations();
         rotations.iter().flat_map(|aligned| aligned.all_translations()).collect()
     }
 
@@ -326,5 +332,35 @@ mod tests {
     fn test_rotate_directions() {
         let shape = Push::from_str("(^>)").unwrap();
         assert_eq!(shape.rotate(), Push::from_str("(>)(v)").unwrap());
+    }
+
+    #[test]
+    fn test_rotations() {
+        let shape = Push::from_str("(^>)").unwrap();
+        // TODO: ideally this assertion would be orderless
+        assert_eq!(shape.all_rotations(), vec![
+            Push::from_str("(^>)").unwrap(),
+            Push::from_str("(<v)").unwrap(),
+            Push::from_str("(>)(v)").unwrap(),
+            Push::from_str("(^)(<)").unwrap(),
+        ]);
+    }
+
+    #[test]
+    fn test_180_sym_rotations() {
+        let shape = Shape::from_str("(##)").unwrap();
+        // TODO: ideally this assertion would be orderless
+        assert_eq!(shape.all_rotations(), vec![
+            Shape::from_str("(##)").unwrap(),
+            Shape::from_str("(#)(#)").unwrap(),
+        ]);
+    }
+
+    #[test]
+    fn test_90_sym_rotations() {
+        let shape = Shape::from_str("(##)(##)").unwrap();
+        assert_eq!(shape.all_rotations(), vec![
+            Shape::from_str("(##)(##)").unwrap(),
+        ]);
     }
 }
