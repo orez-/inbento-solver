@@ -43,8 +43,14 @@ fn solve(board: &Board, goal: &Board, tools: &[Tool]) {
                         let next_board = board.apply_piece(&fig);
                         frontier.push_back((next_board, next_tools.clone()));
                     },
-                    Tool::Copy(fig) => todo!(),
-                    Tool::Swap(fig) => todo!(),
+                    Tool::Copy(fig) => {
+                        let next_board = board.apply_copy(&fig);
+                        frontier.push_back((next_board, next_tools.clone()));
+                    },
+                    Tool::Swap(fig) => {
+                        let next_board = board.apply_swap(&fig);
+                        frontier.push_back((next_board, next_tools.clone()));
+                    },
                 }
             }
         }

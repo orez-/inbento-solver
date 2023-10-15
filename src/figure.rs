@@ -19,6 +19,16 @@ pub type Board = Figure<u8>; // ehh
 pub type Shape = Figure<()>;
 pub type Push = Figure<Direction>;
 
+fn try_into_array<I: Iterator, const N: usize>(mut it: I) -> Result<[I::Item; N], ()> {
+    // it'd be cool if we could skip allocating the vec here,
+    // but it's fine.
+    let vec: Vec<_> = it.by_ref().take(N).collect();
+    if it.next().is_some() {
+        return Err(());
+    }
+    vec.try_into().map_err(|_| ())
+}
+
 pub trait InbentoCell: Clone + PartialEq {
     fn to_char(&self) -> char;
     fn parse(c: char) -> Result<Self, ()> where Self: Sized;
@@ -293,6 +303,7 @@ impl<T: InbentoCell> Figure<T> {
 // ===
 // tool apply fns
 // ===
+#[allow(dead_code)]
 impl Board {
     pub fn apply_push(&self, push: &Push) -> Self {
         let mut out = self.clone();
@@ -339,6 +350,36 @@ impl Board {
                 *dest = src.clone();
             }
         }
+        out
+    }
+
+    pub fn apply_copy(&self, copy: &Piece) -> Self {
+        // TODO: oh this should DEFINITELY be an enum.
+        const COPY: u8 = 1;
+        const PASTE: u8 = 2;
+
+        let copied_idxs = copy.layout.iter().enumerate()
+            .filter(|(_, cell)| matches!(cell, Some(COPY)))
+            .map(|(idx, _)| idx);
+        let [copied_idx] = try_into_array(copied_idxs).unwrap();
+        let copied_cell = self.layout[copied_idx];
+        let mut out = self.clone();
+        for (src, dest) in zip(copy.layout, &mut out.layout) {
+            if matches!(src, Some(PASTE)) {
+                *dest = copied_cell;
+            }
+        }
+        out
+    }
+
+    pub fn apply_swap(&self, shape: &Shape) -> Self {
+        let swapped_idxs = shape.layout.iter().enumerate()
+            .filter(|(_, cell)| cell.is_some())
+            .map(|(idx, _)| idx);
+        let [cell1, cell2] = try_into_array(swapped_idxs).unwrap();
+        let mut out = self.clone();
+        out.layout[cell1] = self.layout[cell2];
+        out.layout[cell2] = self.layout[cell1];
         out
     }
 }
