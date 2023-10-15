@@ -1,4 +1,5 @@
 use std::fmt;
+use itertools::iproduct;
 
 const SIZE: usize = 3;
 const AREA: usize = SIZE * SIZE;
@@ -17,7 +18,7 @@ pub type Board = Figure<u8>; // ehh
 pub type Shape = Figure<()>;
 pub type Push = Figure<Direction>;
 
-pub trait InbentoCell: Clone {
+pub trait InbentoCell: Clone + PartialEq {
     fn to_char(&self) -> char;
     fn parse(c: char) -> Result<Self, ()> where Self: Sized;
     fn rotate(&self) -> Self;
@@ -191,17 +192,50 @@ impl<T: InbentoCell> Figure<T> {
         Ok(Figure::new(layout, rotatable))
     }
 
-    fn configurations(&self) -> Vec<Self> {
-        let rotations: Vec<Self> = if self.rotatable {
-            let turn90 = self.rotate();
-            let turn180 = turn90.rotate();
-            let turn270 = turn180.rotate();
-            // TODO: dedupe
-            vec![self.clone(), turn90, turn180, turn270]
-        } else { vec![self.clone()] };
+    fn shift(&self, Δx: usize, Δy: usize) -> Self {
+        assert!(self.bounding_width + Δx < SIZE);
+        assert!(self.bounding_height + Δy < SIZE);
+        let mut out = Self {
+            layout: Default::default(),
+            rotatable: self.rotatable,
+            bounding_width: SIZE,
+            bounding_height: SIZE,
+        };
+        for sy in 0..self.bounding_height {
+            let dy = Δy + sy;
+            for sx in 0..self.bounding_width {
+                let dx = Δx + sx;
+                let sidx = sy * SIZE + sx;
+                let didx = dy * SIZE + dx;
+                out.layout[didx] = self.layout[sidx].clone();
+            }
+        }
+        out
+    }
 
-        vec![]
-        // for offset in
+    fn all_translations(&self) -> impl Iterator<Item=Self> + '_ {
+        iproduct!(
+            (0..=SIZE - self.bounding_height),
+            (0..=SIZE - self.bounding_width)
+        ).map(|(x, y)| self.shift(x, y))
+    }
+
+    fn transformations(&self) -> Vec<Self> {
+        if !self.rotatable {
+            return self.all_translations().collect();
+        }
+        let turn90 = self.rotate();
+        let turn180 = turn90.rotate();
+        let turn270 = turn180.rotate();
+        // XXX: is it true to say that 0˚=90˚ -> 0˚=180˚ ?
+        // like, either
+        // - all rotations are unique (len = 4)
+        // - 180˚ symmetry (len = 2)
+        // - 90˚ symmetry (len = 1)
+        // I hope so, because otherwise we could have duplicate rotations here.
+        let mut rotations = vec![self.clone(), turn180, turn90, turn270];
+        rotations.dedup();
+        rotations.iter().flat_map(|aligned| aligned.all_translations()).collect()
     }
 
     fn rotate(&self) -> Self {
