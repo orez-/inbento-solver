@@ -1,4 +1,5 @@
 use std::fmt;
+use std::iter::zip;
 use itertools::iproduct;
 
 const SIZE: usize = 3;
@@ -75,6 +76,34 @@ impl InbentoCell for Direction {
     }
 }
 
+fn min_x<T>(layout: &[Option<T>; AREA]) -> usize {
+    layout.iter().enumerate()
+        .flat_map(|(idx, elem)| elem.is_some().then_some(idx % 3 + 1))
+        .min()
+        .unwrap_or(0)
+}
+
+fn min_y<T>(layout: &[Option<T>; AREA]) -> usize {
+    layout.iter().enumerate()
+        .flat_map(|(idx, elem)| elem.is_some().then_some(idx / 3 + 1))
+        .min()
+        .unwrap_or(0)
+}
+
+fn max_x<T>(layout: &[Option<T>; AREA]) -> usize {
+    layout.iter().enumerate()
+        .flat_map(|(idx, elem)| elem.is_some().then_some(idx % 3 + 1))
+        .max()
+        .unwrap_or(0)
+}
+
+fn max_y<T>(layout: &[Option<T>; AREA]) -> usize {
+    layout.iter().enumerate()
+        .flat_map(|(idx, elem)| elem.is_some().then_some(idx / 3 + 1))
+        .max()
+        .unwrap_or(0)
+}
+
 #[derive(PartialEq, Eq, std::hash::Hash, Clone)]
 pub struct Figure<T: InbentoCell> {
     layout: [Option<T>; AREA],
@@ -85,14 +114,8 @@ pub struct Figure<T: InbentoCell> {
 
 impl<T: InbentoCell> Figure<T> {
     pub fn new(layout: [Option<T>; AREA], rotatable: bool) -> Self {
-        let bounding_width = layout.iter().enumerate()
-            .flat_map(|(idx, elem)| elem.is_some().then_some(idx % 3 + 1))
-            .max()
-            .unwrap_or(0);
-        let bounding_height = layout.iter().enumerate()
-            .flat_map(|(idx, elem)| elem.is_some().then_some(idx / 3 + 1))
-            .max()
-            .unwrap_or(0);
+        let bounding_width = max_x(&layout);
+        let bounding_height = max_y(&layout);
         Figure { layout, rotatable, bounding_width, bounding_height }
     }
 
@@ -192,9 +215,9 @@ impl<T: InbentoCell> Figure<T> {
         Ok(Figure::new(layout, rotatable))
     }
 
-    fn shift(&self, Δx: usize, Δy: usize) -> Self {
-        assert!(self.bounding_width + Δx < SIZE);
-        assert!(self.bounding_height + Δy < SIZE);
+    fn shift(&self, Δx: isize, Δy: isize) -> Self {
+        // assert!(self.bounding_width + Δx < SIZE);
+        // assert!(self.bounding_height + Δy < SIZE);
         let mut out = Self {
             layout: Default::default(),
             rotatable: self.rotatable,
@@ -202,9 +225,11 @@ impl<T: InbentoCell> Figure<T> {
             bounding_height: SIZE,
         };
         for sy in 0..self.bounding_height {
-            let dy = Δy + sy;
+            let Some(dy) = sy.checked_add_signed(Δy) else { continue };
+            if dy >= SIZE { continue }
             for sx in 0..self.bounding_width {
-                let dx = Δx + sx;
+                let Some(dx) = sx.checked_add_signed(Δx) else { continue };
+                if dx >= SIZE { continue }
                 let sidx = sy * SIZE + sx;
                 let didx = dy * SIZE + dx;
                 out.layout[didx] = self.layout[sidx].clone();
@@ -217,7 +242,7 @@ impl<T: InbentoCell> Figure<T> {
         iproduct!(
             (0..=SIZE - self.bounding_height),
             (0..=SIZE - self.bounding_width)
-        ).map(|(x, y)| self.shift(x, y))
+        ).map(|(x, y)| self.shift(x as isize, y as isize))
     }
 
     // ignores `rotatable`
@@ -236,7 +261,7 @@ impl<T: InbentoCell> Figure<T> {
         rotations
     }
 
-    fn all_transformations(&self) -> Vec<Self> {
+    pub fn all_transformations(&self) -> Vec<Self> {
         if !self.rotatable {
             return self.all_translations().collect();
         }
@@ -259,6 +284,59 @@ impl<T: InbentoCell> Figure<T> {
                 let didx = dy * SIZE + dx;
                 // rotate the individual cell as well, if it needs it.
                 out.layout[didx] = self.layout[sidx].as_ref().map(|ic| ic.rotate());
+            }
+        }
+        out
+    }
+}
+
+// ===
+// tool apply fns
+// ===
+impl Board {
+    pub fn apply_push(&self, push: &Push) -> Self {
+        let mut out = self.clone();
+        for src in 0..AREA {
+            let Some(dir) = push.layout[src] else { continue };
+            let Some(cell) = self.layout[src].clone() else { continue };
+            let dest = src.wrapping_add(dir);
+            // XXX: this boundscheck sucks.
+            // rethink how we're representing Direction.
+            let sx = src % SIZE;
+            let sy = src / SIZE;
+            let dx = dest % SIZE;
+            let dy = dest / SIZE;
+            if (sx != dx && sy != dy) || dest >= AREA { continue }
+            out.layout[dest] = Some(cell);
+        }
+        out
+    }
+
+    pub fn apply_lift(&self, lift: &Shape) -> (Self, Piece) {
+        let mut out = self.clone();
+        let mut lifted = Piece {
+            layout: Default::default(),
+            rotatable: lift.rotatable, // XXX: idk that this is true in-game
+            bounding_width: SIZE,
+            bounding_height: SIZE,
+        };
+        for idx in 0..AREA {
+            if lift.layout[idx].is_none() { continue }
+            lifted.layout[idx] = out.layout[idx].take();
+        }
+        let min_x = min_x(&lifted.layout) as isize;
+        let min_y = min_y(&lifted.layout) as isize;
+        let mut lifted = lifted.shift(-min_x, -min_y);
+        lifted.bounding_width = max_x(&lifted.layout);
+        lifted.bounding_height = max_y(&lifted.layout);
+        (out, lifted)
+    }
+
+    pub fn apply_piece(&self, piece: &Piece) -> Self {
+        let mut out = self.clone();
+        for (src, dest) in zip(piece.layout, &mut out.layout) {
+            if src.is_some() {
+                *dest = src.clone();
             }
         }
         out
