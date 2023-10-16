@@ -475,7 +475,6 @@ impl<T: InbentoCell> fmt::Debug for Figure<T> {
             write!(f, "{}", if self.rotatable { ')' } else { ']' })
         };
 
-        write!(f, "\"")?;
         if self.bounding_height == 1 {
             write_row(f, 0)?;
         } else {
@@ -485,7 +484,7 @@ impl<T: InbentoCell> fmt::Debug for Figure<T> {
                 writeln!(f)?;
             }
         }
-        write!(f, "\"")
+        Ok(())
     }
 }
 

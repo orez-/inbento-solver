@@ -1,7 +1,7 @@
-use std::collections::{HashMap, VecDeque};
-
 mod figure;
 
+use std::collections::{HashMap, VecDeque};
+use std::iter::zip;
 use crate::figure::*;
 
 fn swap_remove_each<T: Clone>(list: &[T]) -> impl Iterator<Item=(T, Vec<T>)> + '_ {
@@ -12,7 +12,7 @@ fn swap_remove_each<T: Clone>(list: &[T]) -> impl Iterator<Item=(T, Vec<T>)> + '
     })
 }
 
-fn solve(board: &Board, goal: &Board, tools: &[Tool]) {
+fn solve(board: &Board, goal: &Board, tools: &[Tool]) -> Result<Vec<(Board, Tool)>, ()> {
     // TODO: `tools` in the `frontier` might make sense as a `Rc<Vec<Tools>>`
     let start = (board.clone(), tools.to_vec());
     let mut paths = HashMap::new();
@@ -27,12 +27,8 @@ fn solve(board: &Board, goal: &Board, tools: &[Tool]) {
         //     println!("{i}");
         // }
         if &board == goal {
-            println!("found it");
-            let path = rebuild_path((board, tools), paths);
-            println!("{path:?}");
-            return;
+            return Ok(rebuild_path((board, tools), paths));
         }
-        // let prev = Some((board.clone(), tools.clone()));
         for (tool, next_tools) in swap_remove_each(&tools) {
             for action in tool.all_transformations() {
                 match &action {
@@ -77,13 +73,14 @@ fn solve(board: &Board, goal: &Board, tools: &[Tool]) {
             }
         }
     }
+    Err(())
 }
 type GameState = (Board, Vec<Tool>);
-fn rebuild_path(goal: GameState, mut paths: HashMap<GameState, Option<(Board, Vec<Tool>, Tool)>>) -> Vec<(Board, Option<Tool>)> {
-    let mut path = vec![(goal.0.clone(), None)];
+fn rebuild_path(goal: GameState, mut paths: HashMap<GameState, Option<(Board, Vec<Tool>, Tool)>>) -> Vec<(Board, Tool)> {
+    let mut path = Vec::new();
     let mut state = goal;
     while let Some((board, tools, tool)) = paths.remove(&state).flatten() {
-        path.push((board.clone(), Some(tool)));
+        path.push((board.clone(), tool));
         state = (board, tools);
     }
     path.reverse();
@@ -110,6 +107,18 @@ impl Tool {
             Tool::Swap(fig) => fig.all_transformations().into_iter().map(Tool::Swap).collect(),
         }
     }
+}
+
+// Assumes s1 is uniform width, because that's our use case.
+fn inline_multiline_strs(s1: &str, s2: &str) -> String {
+    let mut out = String::new();
+    for (a, b) in zip(s1.lines(), s2.lines()) {
+        out.push_str(a);
+        out.push_str("   ");
+        out.push_str(b);
+        out.push('\n');
+    }
+    out
 }
 
 fn main() -> Result<(), &'static str> {
@@ -146,7 +155,11 @@ fn main() -> Result<(), &'static str> {
         Tool::Push(Push::from_str("(v<)")?),
     ];
 
-    println!("{board:?}\n{goal:?}\n{tools:?}");
-    solve(&board, &goal, &tools);
+    let solution = solve(&board, &goal, &tools).unwrap();
+    for (board, tool) in solution {
+        let step = inline_multiline_strs(&format!("{board:?}"), &format!("{tool:?}"));
+        println!("{step}");
+    }
+    println!("{goal:?}");
     Ok(())
 }
