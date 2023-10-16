@@ -4,13 +4,15 @@ use itertools::iproduct;
 
 const SIZE: usize = 3;
 const AREA: usize = SIZE * SIZE;
-// XXX: these directions could be an enum, but I think that'd just complicate things
-// (not like all the other decisions i've made here 😐)
-type Direction = usize;
-const UP: Direction = 0_usize.wrapping_sub(SIZE);
-const RIGHT: Direction = 1;
-const DOWN: Direction = SIZE;
-const LEFT: Direction = usize::MAX;
+
+#[repr(i8)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub enum Direction {
+    Down = SIZE as i8,
+    Left = -1,
+    Right = 1,
+    Up = -(SIZE as i8),
+}
 
 type ParserError = &'static str;
 
@@ -57,31 +59,29 @@ impl InbentoCell for u8 {
 impl InbentoCell for Direction {
     fn to_char(&self) -> char {
         match *self {
-            UP => '^',
-            RIGHT => '>',
-            DOWN => 'v',
-            LEFT => '<',
-            _ => panic!(),
+            Self::Up => '^',
+            Self::Right => '>',
+            Self::Down => 'v',
+            Self::Left => '<',
         }
     }
 
     fn parse(c: char) -> Result<Self, ()> {
         Ok(match c {
-            '^' => UP,
-            '>' => RIGHT,
-            'v' => DOWN,
-            '<' => LEFT,
+            '^' => Self::Up,
+            '>' => Self::Right,
+            'v' => Self::Down,
+            '<' => Self::Left,
             _ => return Err(()),
         })
     }
 
     fn rotate(&self) -> Self {
         match *self {
-            UP => RIGHT,
-            RIGHT => DOWN,
-            DOWN => LEFT,
-            LEFT => UP,
-            _ => panic!(),
+            Self::Up => Self::Right,
+            Self::Right => Self::Down,
+            Self::Down => Self::Left,
+            Self::Left => Self::Up,
         }
     }
 }
@@ -382,9 +382,8 @@ impl Board {
         for src in 0..AREA {
             let Some(dir) = push.layout[src] else { continue };
             if out.layout[src].is_none() { continue };
-            let dest = src.wrapping_add(dir);
-            // XXX: this boundscheck sucks.
-            // rethink how we're representing Direction.
+            let Some(dest) = src.checked_add_signed(dir as isize) else { continue };
+            // edge check
             let sx = src % SIZE;
             let sy = src / SIZE;
             let dx = dest % SIZE;
@@ -585,5 +584,21 @@ mod tests {
         let expected = Board::from_str("[123][45.][786]").unwrap();
         let actual = board.apply_push(&push);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_push_no_wrap_right() {
+        let board = Board::from_str("[123][456][789]").unwrap();
+        let push = Push::from_str("(...)(..>)(...)").unwrap();
+        let actual = board.apply_push(&push);
+        assert_eq!(actual, board);
+    }
+
+    #[test]
+    fn test_push_no_wrap_down() {
+        let board = Board::from_str("[123][456][789]").unwrap();
+        let push = Push::from_str("(...)(...)(.v.)").unwrap();
+        let actual = board.apply_push(&push);
+        assert_eq!(actual, board);
     }
 }
