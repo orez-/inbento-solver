@@ -33,14 +33,14 @@ fn solve(board: &Board, goal: &Board, tools: &[Tool]) -> Result<Vec<(Board, Tool
             for action in tool.all_transformations() {
                 match &action {
                     Tool::Push(fig) => {
-                        let next_board = board.apply_push(&fig);
+                        let next_board = board.apply_push(fig);
                         let state = (next_board, next_tools.clone());
                         let prev = (board.clone(), tools.clone(), action);
                         paths.insert(state.clone(), Some(prev));
                         frontier.push_back(state);
                     }
                     Tool::Lift(fig) => {
-                        let (next_board, piece) = board.apply_lift(&fig);
+                        let (next_board, piece) = board.apply_lift(fig);
                         let mut next_tools = next_tools.clone();
                         next_tools.push(Tool::Piece(piece));
                         let state = (next_board, next_tools);
@@ -49,21 +49,21 @@ fn solve(board: &Board, goal: &Board, tools: &[Tool]) -> Result<Vec<(Board, Tool
                         frontier.push_back(state);
                     }
                     Tool::Piece(fig) => {
-                        let next_board = board.apply_piece(&fig);
+                        let next_board = board.apply_piece(fig);
                         let state = (next_board, next_tools.clone());
                         let prev = (board.clone(), tools.clone(), action);
                         paths.insert(state.clone(), Some(prev));
                         frontier.push_back(state);
                     },
                     Tool::Copy(fig) => {
-                        let next_board = board.apply_copy(&fig);
+                        let next_board = board.apply_copy(fig);
                         let state = (next_board, next_tools.clone());
                         let prev = (board.clone(), tools.clone(), action);
                         paths.insert(state.clone(), Some(prev));
                         frontier.push_back(state);
                     }
                     Tool::Swap(fig) => {
-                        let next_board = board.apply_swap(&fig);
+                        let next_board = board.apply_swap(fig);
                         let state = (next_board, next_tools.clone());
                         let prev = (board.clone(), tools.clone(), action);
                         paths.insert(state.clone(), Some(prev));
