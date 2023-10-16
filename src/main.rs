@@ -1,8 +1,18 @@
-mod figure;
+mod tools;
 
 use std::collections::{HashMap, VecDeque};
 use std::iter::zip;
-use crate::figure::*;
+use crate::tools::*;
+
+pub(crate) fn try_into_array<I: Iterator, const N: usize>(mut it: I) -> Result<[I::Item; N], ()> {
+    // it'd be cool if we could skip allocating the vec here,
+    // but it's fine.
+    let vec: Vec<_> = it.by_ref().take(N).collect();
+    if it.next().is_some() {
+        return Err(());
+    }
+    vec.try_into().map_err(|_| ())
+}
 
 fn swap_remove_each<T: Clone>(list: &[T]) -> impl Iterator<Item=(T, Vec<T>)> + '_ {
     (0..list.len()).map(|idx| {
@@ -93,7 +103,7 @@ enum Tool {
     Push(Push),
     Lift(Shape),
     Piece(Piece),
-    Copy(Piece),
+    Copy(CopyPaste),
     Swap(Shape),
 }
 

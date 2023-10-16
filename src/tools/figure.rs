@@ -1,8 +1,10 @@
 use std::fmt;
 use std::iter::zip;
 use itertools::iproduct;
+use crate::try_into_array;
+use super::CopyPaste;
 
-const SIZE: usize = 3;
+pub(super) const SIZE: usize = 3;
 const AREA: usize = SIZE * SIZE;
 
 #[repr(i8)]
@@ -14,22 +16,12 @@ pub enum Direction {
     Up = -(SIZE as i8),
 }
 
-type ParserError = &'static str;
+pub(super) type ParserError = &'static str;
 
 pub type Piece = Figure<u8>;
 pub type Board = Figure<u8>; // ehh
 pub type Shape = Figure<()>;
 pub type Push = Figure<Direction>;
-
-fn try_into_array<I: Iterator, const N: usize>(mut it: I) -> Result<[I::Item; N], ()> {
-    // it'd be cool if we could skip allocating the vec here,
-    // but it's fine.
-    let vec: Vec<_> = it.by_ref().take(N).collect();
-    if it.next().is_some() {
-        return Err(());
-    }
-    vec.try_into().map_err(|_| ())
-}
 
 pub trait InbentoCell: Clone + PartialEq {
     fn to_char(&self) -> char;
@@ -116,10 +108,10 @@ fn max_y<T>(layout: &[Option<T>; AREA]) -> usize {
 
 #[derive(PartialEq, Eq, Hash, Clone)]
 pub struct Figure<T: InbentoCell> {
-    layout: [Option<T>; AREA],
-    rotatable: bool,
-    bounding_width: usize,
-    bounding_height: usize,
+    pub(super) layout: [Option<T>; AREA],
+    pub(super) rotatable: bool,
+    pub(super) bounding_width: usize,
+    pub(super) bounding_height: usize,
 }
 
 impl<T: InbentoCell> Figure<T> {
@@ -230,7 +222,7 @@ impl<T: InbentoCell> Figure<T> {
     ///  (123)    (41)
     ///  (4..) => (.2)
     ///           (.3)
-    fn rotate(&self) -> Self {
+    pub(super) fn rotate(&self) -> Self {
         let mut out = Self {
             layout: Default::default(),
             rotatable: self.rotatable,
@@ -261,7 +253,7 @@ impl<T: InbentoCell> Figure<T> {
     ///        => (...)
     ///           (.56)
     #[allow(non_snake_case)]
-    fn shift(&self, Δx: isize, Δy: isize) -> Self {
+    pub(super) fn shift(&self, Δx: isize, Δy: isize) -> Self {
         // assert!(self.bounding_width + Δx < SIZE);
         // assert!(self.bounding_height + Δy < SIZE);
         let mut out = Self {
@@ -429,19 +421,12 @@ impl Board {
         }
     }
 
-    pub fn apply_copy(&self, copy: &Piece) -> Self {
-        // TODO: oh this should DEFINITELY be an enum.
-        const COPY: u8 = 1;
-        const PASTE: u8 = 2;
-
-        let copied_idxs = copy.layout.iter().enumerate()
-            .filter(|(_, cell)| matches!(cell, Some(COPY)))
-            .map(|(idx, _)| idx);
-        let [copied_idx] = try_into_array(copied_idxs).unwrap();
+    pub fn apply_copy(&self, copy: &CopyPaste) -> Self {
+        let copied_idx = copy.copy_idx();
         let copied_cell = self.layout[copied_idx];
         let mut out = self.clone();
-        for (src, dest) in zip(copy.layout, &mut out.layout) {
-            if matches!(src, Some(PASTE)) {
+        for (src, dest) in zip(copy.shape.layout, &mut out.layout) {
+            if src.is_some() {
                 *dest = copied_cell;
             }
         }
