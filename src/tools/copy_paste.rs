@@ -54,7 +54,7 @@ impl CopyPaste {
 }
 
 impl CopyPaste {
-    pub fn all_transformations(&self) -> Vec<CopyPaste> {
+    pub fn all_transformations(&self) -> Vec<Self> {
         self.shape.all_transformations().into_iter()
             .map(|shape| CopyPaste { shape })
             .collect()

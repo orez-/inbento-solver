@@ -1,6 +1,5 @@
 use std::iter::zip;
-use crate::try_into_array;
-use super::{Figure, Push, Piece, Shape, CopyPaste, AREA, SIZE};
+use super::{Figure, Push, Piece, Shape, CopyPaste, Swap, AREA, SIZE};
 
 pub type Board = Figure<u8>; // ehh
 
@@ -82,18 +81,14 @@ impl Board {
         out
     }
 
-    pub fn apply_swap(&self, shape: &Shape) -> Self {
-        let swapped_idxs = shape.layout.iter().enumerate()
-            .filter(|(_, cell)| cell.is_some())
-            .map(|(idx, _)| idx);
-        let [cell1, cell2] = try_into_array(swapped_idxs).unwrap();
+    pub fn apply_swap(&self, swap: &Swap) -> Self {
         let mut out = self.clone();
+        let [cell1, cell2] = swap.swap_idxs();
         out.layout[cell1] = self.layout[cell2];
         out.layout[cell2] = self.layout[cell1];
         out
     }
 }
-
 
 fn min_x<T>(layout: &[Option<T>; AREA]) -> usize {
     layout.iter().enumerate()

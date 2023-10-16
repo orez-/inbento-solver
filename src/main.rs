@@ -104,7 +104,7 @@ enum Tool {
     Lift(Shape),
     Piece(Piece),
     Copy(CopyPaste),
-    Swap(Shape),
+    Swap(Swap),
 }
 
 impl Tool {
@@ -160,8 +160,8 @@ fn main() -> Result<(), &'static str> {
     ")?;
     let tools = vec![
         Tool::Piece(Piece::from_str("(22)(.2)")?),
-        Tool::Swap(Shape::from_str("(#.#)")?),
-        Tool::Swap(Shape::from_str("(##)")?),
+        Tool::Swap(Swap::from_str("(#.#)")?),
+        Tool::Swap(Swap::from_str("(##)")?),
         Tool::Push(Push::from_str("(v<)")?),
     ];
 
